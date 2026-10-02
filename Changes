@@ -1,0 +1,15 @@
+Revision history for App-cpx
+
+0.05  2026-10-02
+    - Fix the MetaCPAN API query: "filtered" was removed in Elasticsearch 6,
+      use a "bool" query with a filter clause instead.
+    - Request the download URL with "_source" source filtering instead of
+      the deprecated Elasticsearch 2.x "fields" option.
+    - Search the "file" type via the /file/_search route, as mapping types
+      no longer exist in Elasticsearch 8.
+    - Query the API with HTTP::Tiny and JSON::PP instead of
+      Search::Elasticsearch: fastapi is a proxy that does not send the
+      "x-elastic-product" response header, so the 8_0 client aborts every
+      search with a ProductCheck error, while the 2_0 and 7_0 clients are
+      no longer shipped.
+    - Keep the $VERSION declared in bin/cpx in sync with the distribution.

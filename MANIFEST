@@ -1,0 +1,7 @@
+bin/cpx
+Changes
+lib/App/cpx.pm
+Makefile.PL
+MANIFEST			This list of files
+META.json
+META.yml

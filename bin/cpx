@@ -1,0 +1,116 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+our $VERSION = '0.05';
+
+use HTTP::Tiny;
+use JSON::PP ();
+use App::cpm 0.997017 ();
+use App::cpm::CLI     ();
+use Cwd;
+sub execute;
+
+my $bin = shift @ARGV;
+
+if (not $bin) {
+    print "🤗 No binary provided\n";
+    exit 0;
+}
+my $local_lib = getcwd . "/local";
+
+# Check if it is already installed (and execute) 
+if (-f "$local_lib/bin/$bin") {
+    print "⚓ Found executable already installed\n";
+    execute($local_lib, $bin);
+}
+
+# MetaCPAN's fastapi is a proxy in front of Elasticsearch 8.
+# We query it with plain HTTP: the Search::Elasticsearch 8_0 client refuses
+# to talk to a server that doesn't answer with an "x-elastic-product:
+# Elasticsearch" header (ProductCheck), which fastapi does not send, and the
+# 2_0/7_0 clients are no longer shipped.
+my $http = HTTP::Tiny->new(
+    agent   => "App-cpx/$VERSION",
+    timeout => 30,
+);
+my $endpoint = 'https://fastapi.metacpan.org/v1/file/_search';
+
+my @hits = ();
+
+# Search MetaCPAN API for script 
+# Try multiple "common" places
+# Suboptimal, but we don't have EXE_FILES from EUMM 
+# nor script_files from MB in CPAN::Meta::Spec
+foreach my $dir ("bin", "scripts", "script", ".") {
+    my $path = "$bin";
+    if ($dir ne ".") {
+        $path = "$dir/" . $path
+    }
+
+    # fastapi routes searches by type in the URL: /{type}/_search.
+    # "filtered" was removed in Elasticsearch 6, so use bool + filter,
+    # and select the fields we need with _source (source filtering).
+    my $res = $http->post(
+        $endpoint,
+        {
+            headers => { 'content-type' => 'application/json' },
+            content => JSON::PP::encode_json(
+                {
+                    size  => 10,
+                    query => {
+                        bool => {
+                            filter => [
+                                { term => { 'path'      => $path } },
+                                { term => { 'directory' => \0 } },
+                                { term => { 'status'    => 'latest' } },
+                            ],
+                        },
+                    },
+                    _source => [ 'release', 'author', 'download_url' ],
+                }
+            ),
+        }
+    );
+
+    die "MetaCPAN API request failed: $res->{status} $res->{reason}\n"
+        unless $res->{success};
+
+    @hits = @{ JSON::PP::decode_json( $res->{content} )->{hits}->{hits} };
+    if (scalar @hits > 0) {
+        print "🎯 Found [$dir/$bin]\n";
+        last;
+    }
+}
+
+# We are out of the loop, maybe because we processed all attempts...
+if (scalar @hits < 1) {
+    print "😞 Not found\n";
+    exit -1;
+}   
+
+# Not exited? Assemble informations for installation 
+my $to_install = $hits[0]->{_source}->{download_url};
+print "📦 Release to install [$to_install]\n";
+
+# Install locally with cpm
+print "🔧 Will install into $local_lib\n";
+my $cpm = App::cpm::CLI->new;
+$cpm->run( 'install', "-L$local_lib", $to_install );
+
+
+# The ultimate goal: execute! 
+sub execute {
+    my $ll = shift; # Local Lib
+    my $b = shift; # bin
+
+    if (-f "$ll/bin/$b") {
+        exec "perl", "-Mlocal::lib=$ll", "$ll/bin/$b", @ARGV;
+    } else {
+        print "💀 Executable was found, but not installed correctly\n";
+        exit -1;
+    }
+}
+
+execute($local_lib, $bin);
