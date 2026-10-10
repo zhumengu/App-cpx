@@ -5,25 +5,45 @@ use warnings;
 
 our $VERSION = '0.05';
 
+use File::Path qw( make_path );
+use Getopt::Long qw( GetOptionsFromArray );
 use HTTP::Tiny;
 use JSON::PP ();
 use App::cpm 0.997017 ();
 use App::cpm::CLI     ();
-use Cwd;
 sub execute;
+sub usage;
+sub default_lib;
 
-my $bin = shift @ARGV;
+# Global options.  Parsing stops at the first non-option argument, so any
+# option placed after the binary name is passed on to the binary itself.
+my @args = @ARGV;
+my $lib_dir;
+Getopt::Long::Configure( 'require_order', 'no_auto_abbrev', 'no_ignore_case' );
+GetOptionsFromArray(
+    \@args,
+    'lib|L|install-dir=s' => \$lib_dir,
+    'help|h'              => sub { usage(0) },
+) or usage(1);
+
+my $bin = shift @args;
 
 if (not $bin) {
     print "🤗 No binary provided\n";
     exit 0;
 }
-my $local_lib = getcwd . "/local";
+
+# All binaries share one installation directory (by default ~/.cache/cpx),
+# so a binary installed from one working directory is found again - and not
+# installed a second time - from any other one.
+$lib_dir = default_lib() unless defined $lib_dir;
+
+make_path($lib_dir) unless -d $lib_dir;
 
 # Check if it is already installed (and execute) 
-if (-f "$local_lib/bin/$bin") {
+if (-f "$lib_dir/bin/$bin") {
     print "⚓ Found executable already installed\n";
-    execute($local_lib, $bin);
+    execute($lib_dir, $bin, @args);
 }
 
 # MetaCPAN's fastapi is a proxy in front of Elasticsearch 8.
@@ -95,22 +115,45 @@ my $to_install = $hits[0]->{_source}->{download_url};
 print "📦 Release to install [$to_install]\n";
 
 # Install locally with cpm
-print "🔧 Will install into $local_lib\n";
+print "🔧 Will install into $lib_dir\n";
 my $cpm = App::cpm::CLI->new;
-$cpm->run( 'install', "-L$local_lib", $to_install );
+$cpm->run( 'install', "-L$lib_dir", $to_install );
 
 
 # The ultimate goal: execute! 
 sub execute {
     my $ll = shift; # Local Lib
-    my $b = shift; # bin
+    my $b  = shift; # bin
 
     if (-f "$ll/bin/$b") {
-        exec "perl", "-Mlocal::lib=$ll", "$ll/bin/$b", @ARGV;
+        exec "perl", "-Mlocal::lib=$ll", "$ll/bin/$b", @_;
     } else {
         print "💀 Executable was found, but not installed correctly\n";
         exit -1;
     }
 }
 
-execute($local_lib, $bin);
+# The shared installation directory: ~/.cache/cpx (or $XDG_CACHE_HOME/cpx,
+# and %USERPROFILE%\.cache\cpx on Windows where HOME is usually unset).
+sub default_lib {
+    my $home = $ENV{HOME} || $ENV{USERPROFILE} || '';
+    my $base = $ENV{XDG_CACHE_HOME} || ( $home ? "$home/.cache" : '.' );
+    return "$base/cpx";
+}
+
+sub usage {
+    my $status = shift || 0;
+
+    print <<"USAGE";
+Usage: cpx [options] <binary> [arguments]
+
+  -L, --lib DIR   install into (and look for) DIR
+                  [default: ~/.cache/cpx]
+  -h, --help      show this message
+
+USAGE
+
+    exit $status;
+}
+
+execute($lib_dir, $bin, @args);
