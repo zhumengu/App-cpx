@@ -1,5 +1,14 @@
 Revision history for App-cpx
 
+0.06  2026-10-10
+    - Add a global -L/--lib option to choose the installation directory.
+      The default is now a shared cache directory, ~/.cache/cpx (or
+      $XDG_CACHE_HOME/cpx), instead of ./local, so that a binary installed
+      from one working directory is found again - and not reinstalled - from
+      any other one.  Options are only parsed before the binary name, so the
+      binary's own options are passed through unchanged.
+    - Add -h/--help.
+
 0.05  2026-10-02
     - Fix the MetaCPAN API query: "filtered" was removed in Elasticsearch 6,
       use a "bool" query with a filter clause instead.
@@ -12,10 +21,4 @@ Revision history for App-cpx
       "x-elastic-product" response header, so the 8_0 client aborts every
       search with a ProductCheck error, while the 2_0 and 7_0 clients are
       no longer shipped.
-    - Add a global -L/--lib option to choose the installation directory.
-      The default is now a shared cache directory, ~/.cache/cpx (or
-      $XDG_CACHE_HOME/cpx), instead of ./local, so that a binary installed
-      from one working directory is found again - and not reinstalled - from
-      any other one.  Options are only parsed before the binary name, so the
-      binary's own options are passed through unchanged.
     - Keep the $VERSION declared in bin/cpx in sync with the distribution.
