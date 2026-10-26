@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use File::Path qw( make_path );
 use Getopt::Long qw( GetOptionsFromArray );
@@ -11,7 +11,9 @@ use HTTP::Tiny;
 use JSON::PP ();
 use App::cpm 0.997017 ();
 use App::cpm::CLI     ();
+use local::lib        ();
 sub execute;
+sub set_local_lib_env;
 sub usage;
 sub default_lib;
 
@@ -124,13 +126,26 @@ $cpm->run( 'install', "-L$lib_dir", $to_install );
 sub execute {
     my $ll = shift; # Local Lib
     my $b  = shift; # bin
+    my $path = "$ll/bin/$b";
 
-    if (-f "$ll/bin/$b") {
-        exec "perl", "-Mlocal::lib=$ll", "$ll/bin/$b", @_;
+    if (-f $path) {
+        # local::lib's environment is equally useful to Perl and non-Perl
+        # programs.  In particular, shell scripts installed into the local
+        # bin directory need that directory in PATH to find their helpers.
+        # Execute the program directly so that its own #! line is honored;
+        # forcing every program through perl breaks shell scripts.
+        set_local_lib_env($ll);
+        exec { $path } $path, @_;
     } else {
         print "💀 Executable was found, but not installed correctly\n";
         exit -1;
     }
+}
+
+sub set_local_lib_env {
+    my $ll = shift;
+    my %env = local::lib->build_environment_vars_for($ll);
+    $ENV{$_} = $env{$_} for keys %env;
 }
 
 # The shared installation directory: ~/.cache/cpx (or $XDG_CACHE_HOME/cpx,

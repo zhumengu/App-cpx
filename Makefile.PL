@@ -11,6 +11,9 @@ NAME             => 'App::cpx',
     LICENSE          => 'artistic_2',
     MIN_PERL_VERSION => '5.006',
     EXE_FILES        => [ 'bin/cpx' ],
+    PREREQ_PM        => {
+        'local::lib' => '0',
+    },
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
     },

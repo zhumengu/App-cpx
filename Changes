@@ -1,5 +1,11 @@
 Revision history for App-cpx
 
+0.07  2026-10-26
+    - Execute installed programs directly after setting up the local::lib
+      environment.  This preserves each program's #! line, so installed
+      shell scripts such as mdee run correctly, while Perl programs still
+      find modules in the local lib.
+
 0.06  2026-10-10
     - Add a global -L/--lib option to choose the installation directory.
       The default is now a shared cache directory, ~/.cache/cpx (or
